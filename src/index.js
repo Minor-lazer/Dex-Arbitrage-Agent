@@ -23,10 +23,42 @@ app.get("/prices", async(req , res)=>{
     }
 } );
 
+
+app.get("/arbitrage", async (req, res) => {
+  try {
+    const { uniswap, sushiswap } = await getPrices();
+
+    // Compute margin difference correctly
+    const cheaper = Math.min(uniswap.price, sushiswap.price);
+    const expensive = Math.max(uniswap.price, sushiswap.price);
+    const marginDifference = ((expensive - cheaper) / cheaper) * 100;
+
+    // Figure out direction of trade
+    const buyFrom = uniswap.price < sushiswap.price ? "uniswap" : "sushiswap";
+    const sellTo = uniswap.price > sushiswap.price ? "uniswap" : "sushiswap";
+
+    res.json({
+      uniswap: uniswap.price,
+      sushiswap: sushiswap.price,
+      spread: marginDifference.toFixed(2) + "%",
+      opportunity: `${marginDifference > 0.5 ? "Voila Opportunity Found!":"Ah No high margin opportunity"}`, // >0.5% difference = arbitrage
+      buyFrom,
+      sellTo
+    });
+
+  } catch (error) {
+    console.error("Error checking arbitrage:", error);
+    res.status(500).json({ error: "Failed to check arbitrage" });
+  }
+});
+
+
+
 app.listen(PORT,()=>{
     console.log("Server running on PORT ",PORT);
     console.log("RPC URL", process.env.RPC_URL);
 })
+
 
 
 
