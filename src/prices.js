@@ -1,4 +1,4 @@
-import { ethers } from "ethers";
+import { ethers,formatUnits } from "ethers";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -28,15 +28,18 @@ async function getPairPrice(pairAddress) {
   const t0 = new ethers.Contract(token0, ERC20_ABI, provider);
   const t1 = new ethers.Contract(token1, ERC20_ABI, provider);
 
-  const [dec0, dec1, sym0, sym1] = await Promise.all([
+  const [dec0Raw, dec1Raw, sym0, sym1] = await Promise.all([
     t0.decimals(),
     t1.decimals(),
     t0.symbol(),
     t1.symbol()
   ]);
 
-  const r0 = Number(reserve0);
-  const r1 = Number(reserve1);
+
+  const dec0 = Number(dec0Raw);
+  const dec1 = Number(dec1Raw);
+  const r0 = parseFloat(formatUnits(reserve0,dec0));
+  const r1 = parseFloat(formatUnits(reserve1,dec1));
 
 
   const price = (r0 / (10 ** dec0)) / (r1 / (10 ** dec1));
@@ -62,6 +65,6 @@ export async function getPrices() {
   return {
     uniswap: uniswapPrice,
     sushiswap: sushiswapPrice,
-    ethUSD: uniswapPrice.price // reference price
+    ethUSD: uniswapPrice.price 
   };
 }
