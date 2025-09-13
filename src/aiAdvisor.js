@@ -22,140 +22,202 @@ export async function analyzeArbitrage(data) {
     }
   }
 
-  const prompt = `
-You are an expert DeFi trader. You must respond with ONLY valid JSON. No explanations, no comments, no markdown formatting.
+  // Try multiple attempts with progressively simpler prompts
+  const attempts = [
+    createSimplePrompt(data, buyOn, sellOn),
+    createUltraSimplePrompt(data, buyOn, sellOn),
+    createMinimalPrompt(data, buyOn, sellOn)
+  ];
 
-Data:
-Uniswap price: ${data.uniswap.price}
-Sushiswap price: ${data.sushiswap.price}
-Spread: ${data.spread}%
-Buy on: ${buyOn || "N/A"}
-Sell on: ${sellOn || "N/A"}
-Question: ${data.customQuestion || "Provide arbitrage advice."}
+  for (let i = 0; i < attempts.length; i++) {
+    try {
+      console.log(`Attempt ${i + 1}:`, attempts[i].substring(0, 200) + "...");
+      
+      const response = await groq.chat.completions.create({
+        model: "llama-3.1-8b-instant",
+        messages: [{ role: "user", content: attempts[i] }],
+        temperature: 0.1, // Very low temperature for consistency
+        max_tokens: 400, // Strict limit
+      });
 
-CRITICAL: Return ONLY valid JSON with this EXACT structure. No comments or explanations inside JSON values:
-
-{
-  "decision": "string describing the trading decision",
-  "reason": "string explaining why this decision was made",
-  "recommendation": "string with specific trading recommendations", 
-  "riskAnalysis": "string describing risks, fees, slippage, and gas costs"
+      const rawResponse = response.choices[0].message.content;
+      console.log(`Raw AI Response (Attempt ${i + 1}):`, rawResponse);
+      
+      const cleanedResponse = aggressiveJsonClean(rawResponse);
+      console.log(`Cleaned Response (Attempt ${i + 1}):`, cleanedResponse);
+      
+      const parsedResponse = JSON.parse(cleanedResponse);
+      
+      // Validate structure
+      if (validateResponse(parsedResponse)) {
+        console.log("✅ Successfully parsed AI response");
+        return parsedResponse;
+      } else {
+        throw new Error("Invalid response structure");
+      }
+      
+    } catch (error) {
+      console.error(`❌ Attempt ${i + 1} failed:`, error.message);
+      if (i === attempts.length - 1) {
+        console.log("🔄 All attempts failed, using fallback");
+        return generateFallbackResponse(data, buyOn, sellOn);
+      }
+    }
+  }
 }
 
-Rules:
-- Use only string values in JSON
-- No parenthetical comments in JSON values
-- No additional fields beyond the 4 required
-- If spread is 0, indicate no opportunity
-- Include risk analysis considering 0.3% fees and 0.5% slippage
-- Maximum response length: 500 characters per field
-`;
+function createSimplePrompt(data, buyOn, sellOn) {
+  return `Return ONLY this JSON format with NO comments, NO nested objects, ONLY strings:
 
+{"decision": "your decision here", "reason": "your reason here", "recommendation": "your recommendation here", "riskAnalysis": "your risk analysis here"}
+
+Data: Uniswap=${data.uniswap.price}, Sushiswap=${data.sushiswap.price}, Spread=${data.spread}%, Buy=${buyOn}, Sell=${sellOn}
+
+Return ONLY the JSON object above with your analysis as string values. NO other text.`;
+}
+
+function createUltraSimplePrompt(data, buyOn, sellOn) {
+  return `JSON only. No comments. No explanations. Fill this template:
+
+{"decision": "trade decision", "reason": "why", "recommendation": "what to do", "riskAnalysis": "risks"}
+
+Spread: ${data.spread}%`;
+}
+
+function createMinimalPrompt(data, buyOn, sellOn) {
+  const spread = parseFloat(data.spread) || 0;
+  const hasOpportunity = Math.abs(spread) > 0.5;
+  
+  return `{"decision": "${hasOpportunity ? `Buy ${buyOn} Sell ${sellOn}` : 'No Trade'}", "reason": "Spread ${spread}%", "recommendation": "${hasOpportunity ? 'Execute arbitrage' : 'Wait'}", "riskAnalysis": "Consider fees and gas"}`;
+}
+
+function aggressiveJsonClean(text) {
   try {
-    const response = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.3, // Lower temperature for more consistent JSON output
-      max_tokens: 800, // Limit response length
-    });
-
-    console.log("Raw AI Response:", response.choices[0].message.content);
+    // Remove all whitespace and newlines first to see the structure
+    let cleaned = text.trim();
     
-    let responseText = response.choices[0].message.content.trim();
+    // Remove any text before the first {
+    const firstBrace = cleaned.indexOf('{');
+    if (firstBrace > 0) {
+      cleaned = cleaned.substring(firstBrace);
+    }
     
-    // Clean the response more aggressively
-    responseText = cleanJsonResponse(responseText);
+    // Remove any text after the last }
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (lastBrace !== -1) {
+      cleaned = cleaned.substring(0, lastBrace + 1);
+    }
     
-    console.log("Cleaned Response:", responseText);
+    // Remove all comments (// style and /* style)
+    cleaned = cleaned.replace(/\/\/.*$/gm, '');
+    cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
     
-    const parsedResponse = JSON.parse(responseText);
+    // Remove comments in parentheses within string values
+    cleaned = cleaned.replace(/"([^"]*)\([^)]*\)([^"]*)"/g, '"$1 $2"');
     
-    // Validate the response structure
-    const requiredFields = ['decision', 'reason', 'recommendation', 'riskAnalysis'];
-    for (const field of requiredFields) {
-      if (!parsedResponse.hasOwnProperty(field)) {
-        throw new Error(`Missing required field: ${field}`);
+    // Split into lines and rebuild, removing duplicates
+    const lines = cleaned.split('\n');
+    const uniqueLines = [];
+    const seenContent = new Set();
+    
+    let braceCount = 0;
+    let inString = false;
+    let skipDuplicates = false;
+    
+    for (let line of lines) {
+      line = line.trim();
+      if (!line) continue;
+      
+      // Track braces to detect structure issues
+      for (let char of line) {
+        if (char === '"' && !line.includes('\\"')) {
+          inString = !inString;
+        }
+        if (!inString) {
+          if (char === '{') braceCount++;
+          if (char === '}') braceCount--;
+        }
+      }
+      
+      // Skip duplicate content
+      const contentKey = line.replace(/[{},\s]/g, '');
+      if (seenContent.has(contentKey) && contentKey !== '') {
+        continue;
+      }
+      seenContent.add(contentKey);
+      
+      uniqueLines.push(line);
+      
+      // Stop if we have a complete object
+      if (braceCount === 0 && line.includes('}') && uniqueLines.length > 2) {
+        break;
       }
     }
     
-    return parsedResponse;
+    let result = uniqueLines.join('\n');
     
-  } catch (e) {
-    console.error("Failed to parse AI response:", e.message);
-    console.error("Full error:", e);
+    // Fix common JSON syntax errors
+    result = result
+      .replace(/,(\s*})/g, '$1') // Remove trailing commas
+      .replace(/}(\s*{)/g, '},\n$1') // Add comma between objects
+      .replace(/"\s*\n\s*"/g, '", "') // Fix broken string continuation
+      .replace(/(\w+):/g, '"$1":') // Quote unquoted keys
+      .replace(/:\s*(\w+)(?=\s*[,}])/g, ': "$1"'); // Quote unquoted values
     
-    // Return a structured fallback response
-    return generateFallbackResponse(data, buyOn, sellOn);
+    // Ensure we have exactly one complete JSON object
+    const openBraces = (result.match(/{/g) || []).length;
+    const closeBraces = (result.match(/}/g) || []).length;
+    
+    if (openBraces > closeBraces) {
+      result += '}';
+    } else if (closeBraces > openBraces) {
+      result = result.replace(/}$/, '');
+    }
+    
+    return result;
+    
+  } catch (error) {
+    console.error("JSON cleaning failed:", error);
+    throw error;
   }
 }
 
-function cleanJsonResponse(text) {
-  // Remove markdown code blocks
-  text = text.replace(/```json\s*/, '').replace(/```\s*$/, '');
-  text = text.replace(/```\s*/, '').replace(/```\s*$/, '');
+function validateResponse(response) {
+  const requiredFields = ['decision', 'reason', 'recommendation', 'riskAnalysis'];
   
-  // Find the first complete JSON object
-  const jsonStart = text.indexOf('{');
-  const jsonEnd = text.lastIndexOf('}');
-  
-  if (jsonStart === -1 || jsonEnd === -1) {
-    throw new Error('No valid JSON object found');
+  if (typeof response !== 'object' || response === null) {
+    return false;
   }
   
-  text = text.substring(jsonStart, jsonEnd + 1);
-  
-  // Remove duplicate content (common AI issue)
-  const lines = text.split('\n');
-  const uniqueLines = [];
-  const seenLines = new Set();
-  
-  for (const line of lines) {
-    const cleanLine = line.trim();
-    if (cleanLine && !seenLines.has(cleanLine)) {
-      uniqueLines.push(line);
-      seenLines.add(cleanLine);
-    } else if (!cleanLine) {
-      uniqueLines.push(line); // Keep empty lines for structure
+  for (const field of requiredFields) {
+    if (!response.hasOwnProperty(field) || typeof response[field] !== 'string') {
+      console.log(`❌ Missing or invalid field: ${field}`);
+      return false;
     }
   }
   
-  text = uniqueLines.join('\n');
-  
-  // Fix common JSON syntax issues
-  text = text
-    // Remove comments in parentheses from JSON values
-    .replace(/"([^"]*)\([^)]*\)([^"]*)"/g, '"$1$2"')
-    // Fix missing commas before closing braces
-    .replace(/"\s*\n\s*}/g, '"\n}')
-    // Fix duplicate closing braces
-    .replace(/}\s*}/g, '}')
-    // Remove trailing commas
-    .replace(/,(\s*[}\]])/g, '$1');
-  
-  return text.trim();
+  return true;
 }
 
 function generateFallbackResponse(data, buyOn, sellOn) {
   const spread = parseFloat(data.spread) || 0;
-  const hasOpportunity = Math.abs(spread) > 0.5; // Consider opportunities > 0.5%
+  const hasOpportunity = Math.abs(spread) > 0.8; // Higher threshold for fallback
+  
+  console.log("🔧 Generating fallback response");
   
   if (!hasOpportunity) {
     return {
-      decision: "No Trade",
-      reason: `Spread of ${spread}% is too small to be profitable after fees and gas costs`,
-      recommendation: "Wait for better arbitrage opportunities with higher spreads",
-      riskAnalysis: "No risk as no trade is recommended"
+      decision: "No Trade Recommended",
+      reason: `Spread of ${spread}% is insufficient for profitable arbitrage after fees`,
+      recommendation: "Monitor for higher spreads above 1% before considering trades",
+      riskAnalysis: "No trading risk as position not recommended. Continue monitoring."
     };
   }
   
   return {
-    decision: hasOpportunity ? `Buy on ${buyOn}, Sell on ${sellOn}` : "No Trade",
-    reason: `Price difference of ${spread}% detected between exchanges`,
-    recommendation: hasOpportunity 
-      ? `Execute arbitrage: buy on ${buyOn} and sell on ${sellOn}. Consider 0.3% fees and 0.5% slippage`
-      : "Spread too small for profitable arbitrage",
-    riskAnalysis: hasOpportunity
-      ? "Moderate risk due to gas costs, slippage, and potential price movements during execution"
-      : "No risk as no trade is recommended"
+    decision: `Execute Arbitrage: Buy on ${buyOn}, Sell on ${sellOn}`,
+    reason: `Profitable spread of ${spread}% detected between exchanges`,
+    recommendation: `Buy ETH on ${buyOn} at lower price, immediately sell on ${sellOn}. Account for 0.6% total fees and gas costs.`,
+    riskAnalysis: `Medium risk due to price volatility, network congestion, and slippage. Potential profit reduced by fees and gas costs.`
   };
 }
