@@ -23,7 +23,7 @@ function App() {
     fetchData();
   }, []);
 
-  if (loading) return <p className="p-4">Loading…</p>;
+  if (loading) return <p className="p-4 text-green-500 text-4xl">Loading arbitrage opportunities…</p>;
   if (!fetchedData) return <p className="p-4">Error loading data.</p>;
 
   return <Dashboard data={fetchedData} onRefresh={fetchData} />;

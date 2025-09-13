@@ -7,38 +7,41 @@ export default function Dashboard({ data, onRefresh }) {
   const { uniswap, sushiswap, spread, aiAdvice } = data;
 
   return (
-    <div className="max-w-xl mx-auto p-6 text-red rounded-2xl shadow-lg bg-white">
-      <h1 className="text-4xl font-bold mb-4 text-red-500">DEX Arbitrage Dashboard (Vite)</h1>
-      <h2 className="text-">Masum Choudhuri</h2>
+    <div className="w-full p-6 text-red bg-linear-65 from-purple-500 to-pink-500">
+      <h1 className="text-4xl font-serif font-bold mb-4 text-amber-50">DEX Arbitrage Dashboards</h1>
+    <div className="flex">
       <WalletConnect/>
       <button
         className="bg-red mb-6 ml-4 px-4 py-2 bg-green-600 rounded hover:bg-green-700"
         onClick={onRefresh}
       >
-        Refresh Data
+        Check opportunity
       </button>
+      </div>
 
-      <section className="mb-6">
-        <h2 className="text-xl font-semibold mb-2">Prices</h2>
-        <p>Uniswap: ${uniswap.price}</p>
-        <p>Sushiswap: ${sushiswap.price}</p>
+      <section className="mb-6 text-white">
+        <h2 className="text-2xl font-bold mb-2">Prices</h2>
+        <p>Ethereum price on Uniswap: ${uniswap.price}</p>
+        <p>Ethereum price on Sushiswap: ${sushiswap.price}</p>
       </section>
 
-      <section className="mb-6">
-        <h2 className="text-xl font-semibold mb-2">Arbitrage</h2>
+      <section className="mb-6 text-white">
+        <h2 className="text-2xl font-bold mb-2">Arbitrage</h2>
         <p>Spread: {spread}%</p>
 
         {parseFloat(spread) <= 0 && (
-          <p className="text-red-500">
+      
+          <p className="text-white ">
             No positive arbitrage opportunity.
           </p>
+    
         )}
       </section>
 
       <section>
-        <h2 className="text-xl font-semibold mb-2">AI Advice</h2>
+        <h2 className="text-2xl font-bold mb-2 text-white">AI Advice</h2>
         {aiAdvice ? (
-          <div>
+          <div className="text-white">
             <p><strong>Decision:</strong> {aiAdvice.decision}</p>
             <p><strong>Reason:</strong> {aiAdvice.reason}</p>
             <p><strong>Recommendation:</strong> {aiAdvice.recommendation}</p>
