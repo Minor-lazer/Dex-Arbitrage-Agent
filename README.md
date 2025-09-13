@@ -11,8 +11,8 @@ Steps to launch backend
 2. Do an npm i , to install all the dependencies
 3. You need to creat an groq API key , to see the AI in action and also an alchemy RPC end point for ethereum RPC calls
 4. Once the api keys are created , store them in your .env file in local with the following names
-5. RPC_URL= https://eth-mainnet.g.alchemy.com/v2/<your API KEY >
-   PORT= your localhost port
+5. RPC_URL= https://eth-mainnet.g.alchemy.com/v2/<your_api_key> ,
+   PORT= your localhost port , 
    GROQ_API_KEY = your groq API end point
 6. Once .env is sorted run the command "node index.js"
 7. The MVP UI would look like the below
