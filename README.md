@@ -18,6 +18,8 @@ Steps to launch backend
 7. The MVP UI would look like the below
    <img width="1920" height="809" alt="Screenshot (419)" src="https://github.com/user-attachments/assets/25a597f5-68ad-4f91-acc8-a07a685d5484" />
 
+   <img width="1920" height="838" alt="Screenshot (422)" src="https://github.com/user-attachments/assets/3bbf01e5-6b92-48c4-8659-e6abebdf92f3" />
+
 
 
 
