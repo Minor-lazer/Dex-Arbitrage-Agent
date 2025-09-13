@@ -1,4 +1,3 @@
-// src/Dashboard.jsx
 import React from "react";
 import WalletConnect from "./WalletConnect";
 
@@ -8,13 +7,12 @@ export default function Dashboard({ data, onRefresh }) {
   const { uniswap, sushiswap, spread, aiAdvice } = data;
 
   return (
-    <div className="max-w-xl mx-auto p-6 bg-gray-900 text-white rounded-2xl shadow-lg">
-      <h1 className="text-2xl font-bold mb-4">DEX Arbitrage Dashboard (Vite)</h1>
-
+    <div className="max-w-xl mx-auto p-6 text-red rounded-2xl shadow-lg bg-white">
+      <h1 className="text-4xl font-bold mb-4 text-red-500">DEX Arbitrage Dashboard (Vite)</h1>
+      <h2 className="text-">Masum Choudhuri</h2>
       <WalletConnect/>
-
       <button
-        className="mb-6 ml-4 px-4 py-2 bg-green-600 rounded hover:bg-green-700"
+        className="bg-red mb-6 ml-4 px-4 py-2 bg-green-600 rounded hover:bg-green-700"
         onClick={onRefresh}
       >
         Refresh Data
